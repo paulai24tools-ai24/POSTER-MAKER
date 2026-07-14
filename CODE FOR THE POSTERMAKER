@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PosterLab AI — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#121116;
+    --surface:#1c1a22;
+    --surface-raised:#242230;
+    --border:#322f3d;
+    --text:#f5f3f0;
+    --muted:#948fa3;
+    --accent:#ff4b3e;
+    --accent-soft:rgba(255,75,62,.15);
+    --ok:#5ee6a8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--void);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .wrap{display:flex;flex-direction:column;min-height:100vh;}
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 28px;border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .word{
+    font-family:'Bebas Neue',sans-serif;
+    font-size:26px;letter-spacing:2px;color:var(--text);
+  }
+  .word span{color:var(--accent);}
+  .sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.5px;}
+  .app{display:grid;grid-template-columns:76px 1.15fr 1fr;flex:1;min-height:0;}
+  @media (max-width:920px){ .app{grid-template-columns:60px 1fr; } .panel{grid-column:1/-1;border-left:none;border-top:1px solid var(--border);} }
+
+  /* rail */
+  .rail{border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:22px 0;gap:6px;}
+  .step-dot{
+    width:38px;height:38px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace;font-size:13px;
+    border:1px solid var(--border);color:var(--muted);
+    background:var(--surface);cursor:not-allowed;
+    transition:all .2s ease;
+  }
+  .step-dot.reachable{cursor:pointer;color:var(--text);}
+  .step-dot.reachable:hover{border-color:var(--accent);}
+  .step-dot.active{background:var(--accent);border-color:var(--accent);color:#1a0806;font-weight:700;}
+  .step-dot.done{background:var(--surface-raised);border-color:var(--ok);color:var(--ok);}
+  .rail-line{width:1px;height:22px;background:var(--border);}
+
+  /* stage */
+  .stage{
+    padding:32px;display:flex;align-items:center;justify-content:center;
+    position:relative;min-height:0;overflow:auto;
+  }
+  .canvas-shell{
+    position:relative;max-width:100%;max-height:100%;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.6);
+    border-radius:2px;overflow:hidden;
+  }
+  #poster{display:block;max-width:100%;max-height:70vh;height:auto;background:#0b0a0d;}
+  .dropzone{
+    width:420px;max-width:100%;aspect-ratio:4/5;
+    border:1.5px dashed var(--border);border-radius:4px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;padding:32px;cursor:pointer;
+    transition:border-color .2s, background .2s;
+    background:var(--surface);
+  }
+  .dropzone.drag{border-color:var(--accent);background:var(--accent-soft);}
+  .dropzone svg{opacity:.5;}
+  .dz-title{font-size:16px;font-weight:600;}
+  .dz-sub{font-size:12.5px;color:var(--muted);line-height:1.5;}
+  .btn{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.5px;
+    background:var(--accent);color:#1a0806;border:none;border-radius:3px;
+    padding:11px 18px;cursor:pointer;font-weight:600;text-transform:uppercase;
+    transition:transform .15s, opacity .15s;
+  }
+  .btn:hover{transform:translateY(-1px);}
+  .btn:active{transform:translateY(0);}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--border);}
+  .btn.ghost:hover{border-color:var(--muted);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+  .loader{
+    display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--muted);
+    font-family:'IBM Plex Mono',monospace;font-size:12px;
+  }
+  .spin{
+    width:34px;height:34px;border-radius:50%;
+    border:2px solid var(--border);border-top-color:var(--accent);
+    animation:sp 0.8s linear infinite;
+  }
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  /* panel */
+  .panel{border-left:1px solid var(--border);padding:26px 26px 20px;overflow-y:auto;min-height:0;display:flex;flex-direction:column;}
+  .panel h2{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin:0 0 4px;}
+  .panel .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--accent);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;}
+  .panel .desc{font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:20px;}
+  .hidden{display:none !important;}
+
+  .summary-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:16px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.6;
+  }
+  .swatches{display:flex;gap:8px;margin-top:10px;}
+  .swatch{width:22px;height:22px;border-radius:4px;border:1px solid rgba(255,255,255,.15);}
+  .tag-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--surface-raised);border:1px solid var(--border);padding:4px 8px;border-radius:20px;color:var(--muted);}
+
+  .style-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;}
+  .style-card{
+    position:relative;border:1px solid var(--border);border-radius:6px;padding:14px 12px;
+    cursor:pointer;background:var(--surface);transition:border-color .15s, transform .15s;
+  }
+  .style-card:hover{border-color:var(--muted);transform:translateY(-2px);}
+  .style-card.picked{border-color:var(--accent);background:var(--accent-soft);}
+  .style-card .swatch-strip{height:5px;border-radius:3px;margin-bottom:10px;}
+  .style-card b{font-size:13.5px;display:block;}
+  .style-card small{color:var(--muted);font-size:11px;display:block;margin-top:3px;line-height:1.4;}
+  .rec-badge{
+    position:absolute;top:8px;right:8px;background:var(--accent);color:#1a0806;
+    font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 6px;border-radius:10px;font-weight:700;
+  }
+
+  .chat-log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:14px;min-height:120px;}
+  .bubble{padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.5;max-width:92%;}
+  .bubble.ai{background:var(--surface);border:1px solid var(--border);align-self:flex-start;}
+  .bubble.user{background:var(--accent-soft);border:1px solid var(--accent);align-self:flex-end;}
+  .bubble.ai b{color:var(--accent);}
+  .chat-input-row{display:flex;gap:8px;}
+  .chat-input-row input{
+    flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;
+    padding:11px 12px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;
+  }
+  .chat-input-row input:focus{outline:none;border-color:var(--accent);}
+  .suggest-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .chip{font-size:11px;font-family:'IBM Plex Mono',monospace;background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:5px 9px;border-radius:20px;cursor:pointer;}
+  .chip:hover{border-color:var(--accent);color:var(--text);}
+
+  .fmt-row{display:flex;gap:8px;margin-bottom:18px;}
+  .fmt{flex:1;border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:10px 6px;text-align:center;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);}
+  .fmt.picked{border-color:var(--accent);color:var(--text);background:var(--accent-soft);}
+  .fmt .ratio{display:block;font-size:14px;color:var(--text);margin-bottom:3px;font-family:'Inter',sans-serif;font-weight:600;}
+
+  .panel-foot{margin-top:auto;padding-top:16px;}
+  .note{font-size:11px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:14px;margin-top:16px;}
+  .note b{color:var(--text);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="word">POSTER<span>LAB</span> AI</div>
+      <div class="sub">CLICKABLE PROTOTYPE — NOT PRODUCTION</div>
+    </div>
+    <div class="sub" id="stepLabel">STEP 1 / 5 — UPLOAD</div>
+  </header>
+
+  <div class="app">
+    <div class="rail" id="rail"></div>
+
+    <div class="stage" id="stage">
+      <div class="dropzone" id="dropzone">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#f5f3f0" stroke-width="1.4"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <div class="dz-title">Drop a photo here</div>
+        <div class="dz-sub">or click to browse — portrait, group, product, pet, anything.<br>Nothing leaves your browser except the analysis request.</div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+        <div class="btn-row" style="margin-top:6px;">
+          <button class="btn" id="browseBtn">Browse file</button>
+          <button class="btn ghost" id="sampleBtn">Use a sample photo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel">
+      <!-- STEP 1 -->
+      <div data-panel="1">
+        <div class="eyebrow">Getting started</div>
+        <h2>Upload a photo</h2>
+        <div class="desc">The AI creative director looks at composition, color, and mood, then proposes poster directions — no prompt-writing needed.</div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div data-panel="2" class="hidden">
+        <div class="eyebrow">AI understanding</div>
+        <h2>Reading the photo</h2>
+        <div id="analyzeLoading" class="desc">Calling Claude with the actual image to identify subject, mood, and color direction…</div>
+        <div id="analyzeResult" class="hidden"></div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div data-panel="3" class="hidden">
+        <div class="eyebrow">Creative direction</div>
+        <h2>Pick a direction</h2>
+        <div class="desc">Starred cards are what the AI recommended for this photo. Any direction works.</div>
+        <div class="style-grid" id="styleGrid"></div>
+      </div>
+
+      <!-- STEP 4 -->
+      <div data-panel="4" class="hidden">
+        <div class="eyebrow">Smart editing</div>
+        <h2>Refine with the director</h2>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="suggest-row" id="chipRow"></div>
+        <div class="chat-input-row" style="margin-top:12px;">
+          <input type="text" id="chatInput" placeholder="e.g. make it feel more dramatic">
+          <button class="btn" id="sendChat">Send</button>
+        </div>
+        <div class="panel-foot">
+          <button class="btn ghost" style="width:100%;" id="toExport">Continue to export →</button>
+        </div>
+      </div>
+
+      <!-- STEP 5 -->
+      <div data-panel="5" class="hidden">
+        <div class="eyebrow">Export</div>
+        <h2>Download your poster</h2>
+        <div class="desc">Pick a format — the composition re-crops in real time.</div>
+        <div class="fmt-row" id="fmtRow"></div>
+        <button class="btn" id="downloadBtn" style="width:100%;">Download PNG</button>
+        <div class="note"><b>What's real vs. mocked here:</b> the image analysis and all poster copy came from a live Claude call against your actual photo. The visual "poster-ization" — color grade, grain, layout, typography placement — is CSS/canvas compositing, not a diffusion model, since this environment doesn't have image-generation access. A production build would swap that layer for a real image-editing model (e.g. Flux Kontext, Gemini image edit).</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<canvas id="poster" width="1080" height="1350"></canvas>
+
+<script>
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-sonnet-4-6";
+
+const STYLES = {
+  matchday: {
+    name: "Match Day", vibe: "high-saturation sports energy",
+    filter: "saturate(1.45) contrast(1.18) brightness(1.04)",
+    accent: "#ffb703", swatch: "linear-gradient(90deg,#0a2463,#ffb703)",
+    font: "'Bebas Neue', sans-serif", desc: "Bold color, stadium-lights contrast, condensed caps type."
+  },
+  cinematic: {
+    name: "Cinematic", vibe: "moody movie-poster drama",
+    filter: "contrast(1.28) saturate(0.72) brightness(0.84) sepia(0.12)",
+    accent: "#e8b34c", swatch: "linear-gradient(90deg,#141018,#e8b34c)",
+    font: "'Playfair Display', serif", desc: "Desaturated shadows, top/bottom title bands, film grain."
+  },
+  editorial: {
+    name: "Editorial", vibe: "glossy magazine cover",
+    filter: "contrast(1.12) saturate(1.08) brightness(1.05)",
+    accent: "#ff4b3e", swatch: "linear-gradient(90deg,#f5f3f0,#ff4b3e)",
+    font: "'Playfair Display', serif", desc: "Masthead bar, coverlines, bold serif headline."
+  },
+  vintage: {
+    name: "Vintage", vibe: "warm handcrafted retro",
+    filter: "sepia(0.42) contrast(1.05) saturate(0.82) brightness(1.05)",
+    accent: "#c97b3d", swatch: "linear-gradient(90deg,#3b2a1a,#c97b3d)",
+    font: "'Playfair Display', serif", desc: "Sepia grade, vignette, framed border, grain."
+  }
+};
+
+const FORMATS = {
+  post:  {label:"Feed",  ratio:"1:1",  w:1080, h:1080},
+  story: {label:"Story", ratio:"9:16", w:1080, h:1920},
+  print: {label:"Print", ratio:"3:4",  w:1500, h:2000}
+};
+
+let state = {
+  step: 1,
+  imgDataUrl: null,
+  img: null,
+  analysis: null,
+  selectedStyle: null,
+  copy: { tagline: "", subtext: "", note: "" },
+  format: "post",
+  maxStep: 1
+};
+
+let noisePattern = null;
+
+// ---------- utilities ----------
+function $(sel){ return document.querySelector(sel); }
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; }
+
+function stripFences(t){
+  return t.replace(/```json/gi,"").replace(/```/g,"").trim();
+}
+
+async function callClaude(content){
+  try{
+    const res = await fetch(API_URL, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1000,
+        messages:[{ role:"user", content }]
+      })
+    });
+    const data = await res.json();
+    const textBlock = (data.content || []).find(b => b.type === "text");
+    return textBlock ? textBlock.text : null;
+  }catch(err){
+    console.error("Claude API error:", err);
+    return null;
+  }
+}
+
+// ---------- rail ----------
+const STEP_NAMES = ["Upload","Understand","Direction","Refine","Export"];
+function renderRail(){
+  const rail = $("#rail");
+  rail.innerHTML = "";
+  for(let i=1;i<=5;i++){
+    const dot = el("div","step-dot", i);
+    if(i < state.step) dot.classList.add("done");
+    else if(i === state.step) dot.classList.add("active");
+    if(i <= state.maxStep){ dot.classList.add("reachable"); dot.onclick = () => goToStep(i); }
+    rail.appendChild(dot);
+    if(i<5) rail.appendChild(el("div","rail-line"));
+  }
+  $("#stepLabel").textContent = `STEP ${state.step} / 5 — ${STEP_NAMES[state.step-1].toUpperCase()}`;
+}
+
+function goToStep(n){
+  if(n > state.maxStep) return;
+  state.step = n;
+  document.querySelectorAll("[data-panel]").forEach(p=>{
+    p.classList.toggle("hidden", p.dataset.panel != n);
+  });
+  renderRail();
+  if(n>=2 && state.img) drawPoster();
+}
+
+// ---------- step 1: upload ----------
+const dropzone = $("#dropzone");
+const fileInput = $("#fileInput");
+$("#browseBtn").onclick = () => fileInput.click();
+dropzone.onclick = (e) => { if(e.target.id!=="browseBtn" && e.target.id!=="sampleBtn") fileInput.click(); };
+fileInput.onchange = (e) => { if(e.target.files[0]) handleFile(e.target.files[0]); };
+["dragenter","dragover"].forEach(ev => dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.add("drag");}));
+["dragleave","drop"].forEach(ev => dropzone.addEventListener(ev, e=>{e.preventDefault(); dropzone.classList.remove("drag");}));
+dropzone.addEventListener("drop", e => { if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = () => setImage(reader.result);
+  reader.readAsDataURL(file);
+}
+
+$("#sampleBtn").onclick = () => setImage(generateSampleImage());
+
+function generateSampleImage(){
+  // procedurally generated placeholder so the demo works with zero external requests
+  const c = document.createElement("canvas"); c.width=900; c.height=1125;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0,0,0,1125);
+  g.addColorStop(0,"#2b3a55"); g.addColorStop(1,"#0d1220");
+  ctx.fillStyle=g; ctx.fillRect(0,0,900,1125);
+  // simple figure silhouette
+  ctx.fillStyle="rgba(255,255,255,0.85)";
+  ctx.beginPath(); ctx.arc(450,430,130,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(280,1125); ctx.quadraticCurveTo(450,700,620,1125); ctx.fill();
+  // rim light
+  const rg = ctx.createRadialGradient(650,250,50,650,250,500);
+  rg.addColorStop(0,"rgba(255,180,80,0.5)"); rg.addColorStop(1,"rgba(255,180,80,0)");
+  ctx.fillStyle=rg; ctx.fillRect(0,0,900,1125);
+  return c.toDataURL("image/png");
+}
+
+function setImage(dataUrl){
+  state.imgDataUrl = dataUrl;
+  const img = new Image();
+  img.onload = () => {
+    state.img = img;
+    state.maxStep = 2;
+    goToStep(2);
+    runAnalysis();
+  };
+  img.src = dataUrl;
+}
+
+// ---------- step 2: analysis ----------
+async function runAnalysis(){
+  $("#analyzeLoading").classList.remove("hidden");
+  $("#analyzeLoading").innerHTML = '<div class="loader" style="align-items:flex-start;"><div class="spin"></div>Calling Claude with your photo to identify subject, mood, category, and color direction…</div>';
+  $("#analyzeResult").classList.add("hidden");
+  drawPoster(true);
+
+  const base64 = state.imgDataUrl.split(",")[1];
+  const mediaType = state.imgDataUrl.substring(5, state.imgDataUrl.indexOf(";"));
+
+  const prompt = `You are an expert creative director analyzing a photo before turning it into poster artwork.
+Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape:
+{"subject_count": number, "main_subject": string, "mood": string, "category": string, "colors": ["#hex","#hex","#hex"], "summary": string, "recommended_styles": ["matchday"|"cinematic"|"editorial"|"vintage", "..."]}
+Rules: "summary" is 1-2 warm, specific sentences in a creative director's voice, addressed to the user, e.g. "We're seeing two people, warm evening light, and a celebratory mood — a collage-style editorial poster would work well here." "recommended_styles" must contain exactly 2 of: matchday, cinematic, editorial, vintage, picked because they genuinely fit this image.`;
+
+  const content = [
+    { type:"image", source:{ type:"base64", media_type: mediaType, data: base64 } },
+    { type:"text", text: prompt }
+  ];
+
+  let raw = await callClaude(content);
+  let parsed = null;
+  if(raw){
+    try{ parsed = JSON.parse(stripFences(raw)); }catch(e){ console.error("parse fail", e, raw); }
+  }
+  if(!parsed){
+    parsed = { subject_count:1, main_subject:"the main subject", mood:"striking", category:"portrait",
+      colors:["#3a3a3a","#8a8a8a","#c9a15a"],
+      summary:"AI analysis didn't come back this time (network or rate limit) — here's a fallback reading. The photo has good contrast and a clear focal point, which works for several poster directions.",
+      recommended_styles:["cinematic","editorial"] };
+  }
+  state.analysis = parsed;
+  renderAnalysis();
+  state.maxStep = 3;
+  renderRail();
+}
+
+function renderAnalysis(){
+  $("#analyzeLoading").classList.add("hidden");
+  const a = state.analysis;
+  const box = $("#analyzeResult");
+  box.classList.remove("hidden");
+  box.innerHTML = "";
+  const card = el("div","summary-card");
+  card.innerHTML = `${a.summary}
+    <div class="swatches">${a.colors.map(c=>`<div class="swatch" style="background:${c}"></div>`).join("")}</div>
+    <div class="tag-row">
+      <span class="tag">${a.subject_count} subject${a.subject_count==1?'':'s'}</span>
+      <span class="tag">${a.category}</span>
+      <span class="tag">${a.mood}</span>
+    </div>`;
+  box.appendChild(card);
+  const cont = el("button","btn", "Continue to styles →");
+  cont.style.width="100%";
+  cont.onclick = () => { renderStyleGrid(); goToStep(3); };
+  box.appendChild(cont);
+}
+
+// ---------- step 3: style ----------
+function renderStyleGrid(){
+  const grid = $("#styleGrid");
+  grid.innerHTML = "";
+  const recs = state.analysis ? state.analysis.recommended_styles : [];
+  Object.entries(STYLES).forEach(([key,s]) => {
+    const card = el("div","style-card");
+    if(state.selectedStyle===key) card.classList.add("picked");
+    if(recs.includes(key)){ const b = el("div","rec-badge","AI PICK"); card.appendChild(b); }
+    card.innerHTML += `<div class="swatch-strip" style="background:${s.swatch}"></div><b>${s.name}</b><small>${s.desc}</small>`;
+    card.onclick = () => selectStyle(key);
+    grid.appendChild(card);
+  });
+}
+
+function selectStyle(key){
+  state.selectedStyle = key;
+  renderStyleGrid();
+  state.maxStep = 4;
+  goToStep(4);
+  $("#chatLog").innerHTML = "";
+  fetchCopy("Starting direction: " + STYLES[key].name + ". Generate the initial poster headline.");
+}
+
+// ---------- step 4: chat / copy ----------
+const STARTER_CHIPS = ["make it more dramatic","warmer color grade","punchier headline","more minimal"];
+function renderChips(){
+  const row = $("#chipRow"); row.innerHTML="";
+  STARTER_CHIPS.forEach(c=>{
+    const chip = el("span","chip",c);
+    chip.onclick = () => { $("#chatInput").value = c; sendEdit(); };
+    row.appendChild(chip);
+  });
+}
+renderChips();
+
+$("#sendChat").onclick = sendEdit;
+$("#chatInput").addEventListener("keydown", e => { if(e.key==="Enter") sendEdit(); });
+
+function addBubble(role, text){
+  const log = $("#chatLog");
+  const b = el("div", "bubble " + (role==="ai"?"ai":"user"), text);
+  log.appendChild(b);
+  log.scrollTop = log.scrollHeight;
+}
+
+function sendEdit(){
+  const input = $("#chatInput");
+  const val = input.value.trim();
+  if(!val) return;
+  addBubble("user", val);
+  input.value = "";
+  fetchCopy(val);
+}
+
+async function fetchCopy(instruction){
+  addBubble("ai", '<span class="loader" style="flex-direction:row;gap:8px;"><span class="spin" style="width:14px;height:14px;"></span> thinking…</span>');
+  const s = STYLES[state.selectedStyle];
+  const a = state.analysis || {};
+  const prompt = `You are an AI creative director building a "${s.name}" poster (${s.vibe}) from a photo described as: subject=${a.main_subject||'subject'}, mood=${a.mood||'neutral'}, category=${a.category||'general'}.
+User instruction: "${instruction}"
+Respond with ONLY raw JSON, no fences: {"tagline": string (1-3 words, ALL CAPS, punchy poster headline), "subtext": string (short supporting line, max 6 words, can be empty string), "note": string (one short sentence, in your voice as the creative director, explaining the choice or acknowledging the edit)}`;
+
+  const raw = await callClaude([{ type:"text", text: prompt }]);
+  let parsed = null;
+  if(raw){ try{ parsed = JSON.parse(stripFences(raw)); }catch(e){ console.error(e, raw); } }
+  if(!parsed){
+    parsed = { tagline: "RISE", subtext: "", note: "Response unavailable — using a fallback headline." };
+  }
+  state.copy = parsed;
+  // replace last (loading) bubble
+  const log = $("#chatLog");
+  log.lastChild.remove();
+  addBubble("ai", `<b>${parsed.tagline}</b>${parsed.subtext? " — "+parsed.subtext : ""}<br>${parsed.note}`);
+  drawPoster();
+}
+
+$("#toExport").onclick = () => {
+  state.maxStep = 5;
+  renderFormats();
+  goToStep(5);
+};
+
+// ---------- step 5: export ----------
+function renderFormats(){
+  const row = $("#fmtRow"); row.innerHTML = "";
+  Object.entries(FORMATS).forEach(([key,f])=>{
+    const d = el("div","fmt" + (state.format===key?" picked":""));
+    d.innerHTML = `<span class="ratio">${f.ratio}</span>${f.label}`;
+    d.onclick = () => { state.format = key; renderFormats(); drawPoster(); };
+    row.appendChild(d);
+  });
+}
+$("#downloadBtn").onclick = () => {
+  const canvas = $("#poster");
+  const a = document.createElement("a");
+  a.download = "posterlab-" + (state.selectedStyle||"poster") + ".png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+};
+
+// ---------- canvas compositing (the "mocked" generation layer) ----------
+function ensureNoise(){
+  if(noisePattern) return noisePattern;
+  const nc = document.createElement("canvas"); nc.width=180; nc.height=180;
+  const nctx = nc.getContext("2d");
+  const imgData = nctx.createImageData(180,180);
+  for(let i=0;i<imgData.data.length;i+=4){
+    const v = Math.random()*255;
+    imgData.data[i]=v; imgData.data[i+1]=v; imgData.data[i+2]=v; imgData.data[i+3]=255;
+  }
+  nctx.putImageData(imgData,0,0);
+  noisePattern = nc;
+  return nc;
+}
+
+function drawCover(ctx,img,x,y,w,h){
+  const ir = img.width/img.height, tr = w/h;
+  let sx,sy,sw,sh;
+  if(ir > tr){ sh=img.height; sw=sh*tr; sx=(img.width-sw)/2; sy=0; }
+  else{ sw=img.width; sh=sw/tr; sx=0; sy=(img.height-sh)/2; }
+  ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
+}
+
+function drawPoster(analysisOnly){
+  if(!state.img) return;
+  const fmt = FORMATS[state.format];
+  const canvas = $("#poster");
+  canvas.width = fmt.w; canvas.height = fmt.h;
+  const ctx = canvas.getContext("2d");
+  const W=fmt.w, H=fmt.h;
+  ctx.clearRect(0,0,W,H);
+
+  const styleKey = state.selectedStyle || "cinematic";
+  const s = STYLES[styleKey];
+  ctx.filter = state.selectedStyle ? s.filter : "grayscale(0.15) brightness(0.95)";
+  drawCover(ctx, state.img, 0, 0, W, H);
+  ctx.filter = "none";
+
+  if(!state.selectedStyle){
+    // pre-style: just a soft dark gradient so text stays legible if any
+    return;
+  }
+
+  // per-style overlay
+  if(styleKey==="matchday"){
+    const g = ctx.createLinearGradient(0,H*0.55,0,H);
+    g.addColorStop(0,"rgba(10,10,15,0)"); g.addColorStop(1,"rgba(10,10,15,0.85)");
+    ctx.fillStyle=g; ctx.fillRect(0,H*0.55,W,H*0.45);
+    ctx.fillStyle = s.accent; ctx.fillRect(0,H-14,W,14);
+  } else if(styleKey==="cinematic"){
+    const gt = ctx.createLinearGradient(0,0,0,H*0.22);
+    gt.addColorStop(0,"rgba(0,0,0,0.75)"); gt.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.fillStyle=gt; ctx.fillRect(0,0,W,H*0.22);
+    const gb = ctx.createLinearGradient(0,H*0.72,0,H);
+    gb.addColorStop(0,"rgba(0,0,0,0)"); gb.addColorStop(1,"rgba(0,0,0,0.88)");
+    ctx.fillStyle=gb; ctx.fillRect(0,H*0.72,W,H*0.28);
+  } else if(styleKey==="editorial"){
+    ctx.fillStyle="rgba(245,243,240,0.96)"; ctx.fillRect(0,0,W,H*0.11);
+    ctx.fillStyle="#141018"; ctx.font = `700 ${W*0.045}px Inter`;
+    ctx.fillText("POSTERLAB", W*0.05, H*0.075);
+    ctx.textAlign="right"; ctx.font = `500 ${W*0.02}px 'IBM Plex Mono'`;
+    ctx.fillText(new Date().getFullYear()+" ISSUE", W*0.95, H*0.075);
+    ctx.textAlign="left";
+  } else if(styleKey==="vintage"){
+    const vg = ctx.createRadialGradient(W/2,H/2,H*0.3,W/2,H/2,H*0.75);
+    vg.addColorStop(0,"rgba(0,0,0,0)"); vg.addColorStop(1,"rgba(20,10,5,0.55)");
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="rgba(245,240,225,0.85)"; ctx.lineWidth=W*0.012;
+    ctx.strokeRect(W*0.035,W*0.035,W-W*0.07,H-W*0.07);
+  }
+
+  // grain
+  const noise = ensureNoise();
+  ctx.save(); ctx.globalAlpha=0.07;
+  const pat = ctx.createPattern(noise,"repeat");
+  ctx.fillStyle = pat; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+
+  // typography
+  if(state.copy && state.copy.tagline){
+    ctx.fillStyle = styleKey==="editorial" ? "#141018" : "#f5f3f0";
+    ctx.textAlign="center";
+    let fontFamily = styleKey==="matchday" ? "'Bebas Neue'" : "'Playfair Display'";
+    let size = W*0.11;
+    let yPos = styleKey==="cinematic" ? H*0.14 : H*0.88;
+    if(styleKey==="editorial"){ ctx.textAlign="left"; yPos = H*0.82; }
+    ctx.font = `900 ${size}px ${fontFamily}`;
+    if(styleKey==="editorial"){
+      ctx.fillStyle = s.accent;
+      ctx.fillRect(W*0.05, yPos-size*0.85, ctx.measureText(state.copy.tagline).width + W*0.04, size*1.05);
+      ctx.fillStyle = "#0d0d10";
+      ctx.fillText(state.copy.tagline, W*0.07, yPos);
+    } else {
+      ctx.fillText(state.copy.tagline, W/2, yPos);
+    }
+    if(state.copy.subtext){
+      ctx.font = `500 ${W*0.022}px 'IBM Plex Mono'`;
+      ctx.fillStyle = styleKey==="editorial" ? "#141018" : s.accent;
+      const subY = styleKey==="editorial" ? yPos + size*0.55 : yPos + size*0.45;
+      ctx.textAlign = styleKey==="editorial" ? "left" : "center";
+      ctx.fillText(state.copy.subtext.toUpperCase(), styleKey==="editorial"?W*0.07:W/2, subY);
+    }
+    ctx.textAlign="left";
+  }
+}
+
+renderRail();
+</script>
+</body>
+</html>
